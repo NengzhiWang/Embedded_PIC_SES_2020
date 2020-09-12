@@ -6,3 +6,5 @@
 !*/Makefile
 !*/nbproject/*.xml
 !*.lkr
+!*.zip
+!*.pdf
