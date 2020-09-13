@@ -47,7 +47,6 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 #endif
-
 void setup(void)
 {
     /***
@@ -67,7 +66,6 @@ void setup(void)
     T0CON0 = 0xCF;
     T0CON1 = 0x47;
 }
-
 void loop(void)
 {
     if (PIR0bits.TMR0IF == 0)
@@ -79,13 +77,12 @@ void loop(void)
         PORTC = ~PORTC;
     }
 }
-
 void main(void)
 {
     setup();
     while (1)
     {
-        loop();
+        loop(); 
     }
     return;
 }

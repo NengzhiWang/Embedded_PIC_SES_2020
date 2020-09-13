@@ -7,7 +7,8 @@
 
 #include <xc.h>
 #ifndef BOOTLOADER
-
+#define TMR0H_rst 0x2F
+#define TMR0L_rst 0x75
 // PIC16F18854 Configuration Bit Settings
 
 // 'C' source line config statements
@@ -54,11 +55,11 @@
 
 void __interrupt() isr(void)
 {
-    // reset TMR0
-    TMR0H = 0x2F;
-    TMR0L = 0x75;
-    PIR0bits.TMR0IF = 0x00;
 
+    // reset TMR0
+    TMR0H = TMR0H_rst;
+    TMR0L = TMR0L_rst;
+    PIR0bits.TMR0IF = 0x00;
     // interrupt task
     PORTC = ~PORTC;
     // flip PORTC
@@ -99,8 +100,8 @@ void setup(void)
     bit_4       T0ASYNC 0       sync
     bit_3-0     T0CKPS  0001    prescaler   1:2
     */
-    TMR0H = 0x2F; //
-    TMR0L = 0x75; //
+    TMR0H = TMR0H_rst;
+    TMR0L = TMR0L_rst;
     PIR0bits.TMR0IF = 0x00;
 }
 void loop(void)

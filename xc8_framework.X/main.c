@@ -58,7 +58,7 @@ void __interrupt() isr(void)
     */
     PIR0bits.TMR0IF = 0x00;
     // clear TMR0 register
-    PORTC=~PORTC;
+    PORTC = ~PORTC;
     // flip PORTC
 }
 
@@ -69,7 +69,7 @@ void setup(void)
     ANSELC = 0x00;
     LATC = 0x00;
     TRISC = 0x00;
-    PORTC = 0x00;
+    PORTC = 0xFF;
     /***********************************************************/
     // init interrupt
     INTCONbits.GIE = 1;
@@ -108,9 +108,9 @@ void loop(void)
 void main(void)
 {
     setup();
-    while (1)
-    {
-        // loop();
-    }
+    //while (1)
+    //{
+    //    loop();
+    //}
     return;
 }
