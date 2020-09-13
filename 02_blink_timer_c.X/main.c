@@ -52,14 +52,14 @@ void setup(void)
 {
     /***
     init PORTC
-    ***/
+     ***/
     PORTC = 0x00;
     ANSELC = 0x00;
     LATC = 0x00;
     TRISC = 0x00;
     /***
     init TMR0
-    ***/
+     ***/
     TMR0H = 0xF3;
     TMR0L = 0x00;
     PIR0bits.TMR0IF = 0x00;

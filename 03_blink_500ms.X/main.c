@@ -66,13 +66,13 @@ void __interrupt() isr(void)
 
 void setup(void)
 {
-    /*************************************/
+    /***********************************************************/
     // init PORTC
     ANSELC = 0x00;
     LATC = 0x00;
     TRISC = 0x00;
     PORTC = 0x00;
-    /*************************************/
+    /***********************************************************/
     // init interrupt
     INTCONbits.GIE = 1;
     // global interrupt     enable
@@ -83,7 +83,7 @@ void setup(void)
     PIE0bits.TMR0IE = 1;
     // Timer0 interrupt     enable
 
-    /*************************************/
+    /***********************************************************/
     // init TMR0
     T0CON0 = 0xD3;
     /*

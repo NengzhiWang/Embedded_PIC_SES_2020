@@ -7,6 +7,7 @@
 
 #include <xc.h>
 #ifndef BOOTLOADER
+
 // PIC16F18854 Configuration Bit Settings
 
 // 'C' source line config statements
@@ -47,64 +48,41 @@
 // Use project enums instead of #define for ON and OFF.
 #endif
 
-/*
- * ISR definition 
- */
-
-void __interrupt() isr(void)
-{
-    /*
-        interrupt sub program
-    */
-    PIR0bits.TMR0IF = 0x00;
-    // clear TMR0 register
-    PORTC = ~PORTC;
-    // flip PORTC
-}
-
 void setup(void)
 {
-    /***********************************************************/
-    // init PORTC
+    /***
+    init PORTC
+    ***/
+    PORTC = 0x00;
     ANSELC = 0x00;
     LATC = 0x00;
     TRISC = 0x00;
-    PORTC = 0x00;
-    /***********************************************************/
-    // init interrupt
-    INTCONbits.GIE = 1;
-    // global interrupt     enable
-    INTCONbits.PEIE = 0;
-    // peripheral interrupt disable
-    INTCONbits.INTEDG = 1;
-    // interrupt            rising edge
-    PIE0bits.TMR0IE = 1;
-    // Timer0 interrupt     enable
+    /***
+    init TMR0
+    ***/
 
-    /***********************************************************/
-    // init TMR0
-    T0CON0 = 0xCF;
-    /*
-    B'11001111'
-    bit_7       T0EN    1       enable      TMR0
-    bit_4       T016BIT 0       select      8bit
-    bit_3-0     T0OUTPS 1111    postscaler  1:16
-    */
-    T0CON1 = 0x47;
-    /*
-    B'01000111'
-    bit_7-5     T0CS    010     clk_source  F_OSC / 4
-    bit_4       T0ASYNC 0       sync
-    bit_3-0     T0CKPS  0111    prescaler   1:128
-    */
+    T0CON0 = 0xD3;
+    T0CON1 = 0x41;
 
-    TMR0H = 0xF3;
-    TMR0L = 0x00;
+    TMR0H = 0x2F;
+    TMR0L = 0x75;
     PIR0bits.TMR0IF = 0x00;
 }
+
 void loop(void)
 {
+    if (PIR0bits.TMR0IF == 0)
+    {
+    }
+    else
+    {
+        PORTC = ~PORTC;
+        TMR0H = 0x2F;
+        TMR0L = 0x75;
+        PIR0bits.TMR0IF = 0x00;
+    }
 }
+
 void main(void)
 {
     setup();
