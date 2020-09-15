@@ -7,7 +7,6 @@
 
 #include <xc.h>
 #ifndef BOOTLOADER
-
 // PIC16F18854 Configuration Bit Settings
 
 // 'C' source line config statements
@@ -47,35 +46,73 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 #endif
-int i,j=0;
+
+/*
+ * ISR definition 
+ */
+
 void __interrupt() isr(void)
 {
-    PORTC=0;
-    const char decode[10]={0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
-    const char stay[4]={0xFE,0xFD,0xFB,0xF7};
-    i++;
-    j=i/333;
-    PORTA = stay[i%4];
-    PORTC = decode[(i%4+j)%10]; 
-    PIR0bits.TMR0IF =0;//clear,if not,keep interrupting
+    /*
+        interrupt sub program
+     */
+    PIR0bits.TMR0IF = 0x00;
+    // clear TMR0 register
+    PORTC = ~PORTC;
+    // flip PORTC
 }
 
-void main(void) {
-    TRISA = 0x00; 
+void setup(void)
+{
+    /***********************************************************/
+    // init PORTC
+    ANSELC = 0x00;
+    LATC = 0x00;
     TRISC = 0x00;
-    ANSELA = 0;
-    ANSELC = 0;
-    PORTA = 0xFF; //for R
-    PORTC = 0; //for S
-    //3200 3.2ms
-    TMR0H = 0xA; //10
+    PORTC = 0x00;
+    /***********************************************************/
+    // init interrupt
+    INTCONbits.GIE = 1;
+    // global interrupt     enable
+    INTCONbits.PEIE = 0;
+    // peripheral interrupt disable
+    INTCONbits.INTEDG = 1;
+    // interrupt            rising edge
+    PIE0bits.TMR0IE = 1;
+    // Timer0 interrupt     enable
+
+    /***********************************************************/
+    // init TMR0
+    T0CON0 = 0xCF;
+    /*
+    B'1100 1111'
+    bit_7       T0EN    1       enable      TMR0
+    bit_4       T016BIT 0       select      8bit
+    bit_3-0     T0OUTPS 1111    postscaler  1:16
+     */
+    T0CON1 = 0x47;
+    /*
+    B'0100 0111'
+    bit_7-5     T0CS    010     clk_source  F_OSC / 4
+    bit_4       T0ASYNC 0       sync
+    bit_3-0     T0CKPS  0111    prescaler   1:128
+     */
+
+    TMR0H = 0xF3;
     TMR0L = 0x00;
-    T0CON0 = 0xC9;//B'11001001' 1:10 
-    T0CON1 = 0x45;//B'01000101'  32
-    
-    INTCONbits.GIE=1; //global interrupt,enables all active interrupts
-    PIR0bits.TMR0IF = 0;//clear TMR0 Interrupt flag
-    PIE0bits.TMR0IE = 1;//enable TMR0 Interrupt flag
-    while (1);  
+    PIR0bits.TMR0IF = 0x00;
+}
+
+void loop(void)
+{
+}
+
+void main(void)
+{
+    setup();
+    while (1)
+    {
+        loop();
+    }
     return;
 }
