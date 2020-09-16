@@ -47,8 +47,8 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 #endif
-
 #define TMR0_rst TMR0H = 0xEC, TMR0L = 0x82, PIR0bits.TMR0IF = 0x00
+
 const unsigned char digital_decode[10] = {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
 const unsigned int LED_select_signal[4] = {0xEE, 0xDD, 0xBB, 0x77};
 // Display LEDs Select decode
@@ -57,12 +57,13 @@ unsigned char interrupt_count = 0;
 
 unsigned char display_signal[4] = {0x00, 0x00, 0x00, 0x00};
 unsigned char count[10] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; //1 2 3 4 5 6 7 8 9 10
+unsigned char long_or_short = 0x00;
+unsigned char one_or_two = 0x00;
 unsigned char key = 0x00;
-unsigned char temp = 0;
-unsigned int last_state, current_state, key_state, last_key_state;
+unsigned int interval = 0;
+unsigned int onecount = 0;
 
 void scan(void) {
-    current_state = 0x00;
     PORTB = 0x0f;
     if (PORTB != 0x0f) {
         if (PORTBbits.RB0 == 0)
@@ -91,7 +92,7 @@ void scan(void) {
                     key = 3;
             } else {
                 PORTB = 0x01; //0000 0001
-                if (PORTB != 0x01) //0000 0001
+                if (PORTB != 0x01)//0000 0001
                     key = 5;
                 else
                     key = 0;
@@ -99,19 +100,38 @@ void scan(void) {
         }
     }
 
-    current_state = (1 << key) ;
-    /*
-    if (temp != 0)
-        temp = temp - 1;
-    if (key != 0)
-    {
-        if (temp == 0)
+    if (interval != 0)
+        interval = interval - 1;
+
+    if (key != 0) {
+        if (onecount != 0)//key is continued
+            onecount = onecount + 1;
+        else if (onecount == 0)//key is started
         {
-            count[key - 1] = count[key - 1] + 1;
-            temp = 50;
+            if (interval >= 350)//key is too closed
+            {
+                one_or_two = 1;
+            }
+
+            if (one_or_two == 0)//key is not too closed
+            {
+                count[key - 1] = count[key - 1] + 1;
+                interval = 400;
+                onecount = onecount + 1;
+            }
         }
+
+        if (onecount > 200)
+            long_or_short = 1;
+        else
+            long_or_short = 0;
+    } else {
+        if (onecount != 0)//key is ended
+        {
+            onecount = 0;
+        }
+        one_or_two = 0;
     }
-     */
 }
 
 void __interrupt() isr(void) {
@@ -121,13 +141,9 @@ void __interrupt() isr(void) {
     // clear PORTC
     PORTC = 0x00;
     PORTA = LED_select_signal[interrupt_count & 0x03];
-    PORTC = display_signal[interrupt_count & 0x03];
-    if ((interrupt_count - 2) & 0x03) {
-        scan();
-//        key_state = (last_state) &current_state;
-        key_state |= (~last_state) &current_state;
-        last_state = current_state;
-    }
+
+    scan();
+
 }
 
 void port_init(void) {
@@ -166,12 +182,23 @@ void setup(void) {
 }
 
 void loop(void) {
-    // if (current_state != last_state)
 
-    display_signal[1] = key_state & 0xFF;
-    display_signal[0] = (key_state >> 8) & 0xFF;
-
-    // last_state = current_state;
+    if (key == 0) {
+        PORTC = display_signal[interrupt_count & 0x03];
+    } else if (key == 10) {
+        display_signal[0] = digital_decode[0];
+        display_signal[1] = digital_decode[count[key - 1] % 10];
+        display_signal[2] = digital_decode[one_or_two];
+        display_signal[3] = digital_decode[long_or_short];
+        PORTC = display_signal[interrupt_count & 0x03];
+    } else {
+        display_signal[0] = digital_decode[key];
+        display_signal[1] = digital_decode[count[key - 1] % 10];
+        display_signal[2] = digital_decode[one_or_two];
+        display_signal[3] = digital_decode[long_or_short];
+        PORTC = display_signal[interrupt_count & 0x03];
+    }
+    PORTC = display_signal[interrupt_count & 0x03];
 }
 
 void main(void) {

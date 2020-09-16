@@ -48,35 +48,64 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 #endif
-int i,j=0;
-void __interrupt() isr(void)
-{
-    PORTC=0;
-    const char decode[10]={0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
-    const char stay[4]={0xFE,0xFD,0xFB,0xF7};
-    i++;
-    j=i/333;
-    PORTA = stay[i%4];
-    PORTC = decode[(i%4+j)%10]; 
-    PIR0bits.TMR0IF =0;//clear,if not,keep interrupting
+const char decode[10] = {0x60,0xda,0xf2,0x66,0xb6,0xbe,0xe0,0xfe,0xf6,0xfc};
+const char stay[4]={0xFE,0xFD,0xFB,0xF7};
+
+void PORTinit(void) {
+    TRISA = 0x00;
+    TRISC = 0x00;     
+    ANSELA = 0;
+    ANSELC = 0;
+    PORTA = 0xFF;
+    PORTC = 0x00;
+}
+
+void delay(void) {
+    int i=100;
+    while(i--);
 }
 
 void main(void) {
-    TRISA = 0x00; 
-    TRISC = 0x00;
-    ANSELA = 0;
-    ANSELC = 0;
-    PORTA = 0xFF; //for R
-    PORTC = 0; //for S
-    //3200 3.2ms
-    TMR0H = 0xA; //10
-    TMR0L = 0x00;
-    T0CON0 = 0xC9;//B'11001001' 1:10 
-    T0CON1 = 0x45;//B'01000101'  32
-    
-    INTCONbits.GIE=1; //global interrupt,enables all active interrupts
-    PIR0bits.TMR0IF = 0;//clear TMR0 Interrupt flag
-    PIE0bits.TMR0IE = 1;//enable TMR0 Interrupt flag
-    while (1);  
+    PORTinit();
+    int en = 0;
+    while (1) {
+        PORTA=0b11111111;
+        switch (PORTA) {
+            case 0b11111110: PORTC=decode[6]; //break;//S7
+            case 0b11111101: PORTC=decode[7];// break;//S8
+            case 0b11111011: PORTC=decode[8];// break;//S9
+            case 0b11110111: PORTC=decode[9];// break;//S10
+            default: en = 0;
+        }
+
+        if (en == 0) {
+            PORTA=0b11110111;
+            delay();
+            switch (PORTA) {
+                case 0b11110110: PORTC=decode[1]; //break;//S2
+                case 0b11110101: PORTC=decode[3]; //break;//S4
+                case 0b11110011: PORTC=decode[5]; //break;//S6
+                default: en = 0;
+            }
+        }
+
+        if (en == 0) {
+            PORTA=0b11111011;
+            delay();
+            switch (PORTA) {
+                case 0b11111010: PORTC=decode[0];// break;//S1
+                case 0b11111001: PORTC=decode[2];// break;//S3
+                default: en = 0;
+            }
+        }
+
+        if (en == 0) {
+            PORTA=0b11111101;
+            delay();
+            if (PORTA == 0b11111100) {
+                PORTC=decode[4];//S5
+            }
+        }
+    }
     return;
 }

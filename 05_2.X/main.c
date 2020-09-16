@@ -47,165 +47,64 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 #endif
+const char decode[10] = {0x60,0xda,0xf2,0x66,0xb6,0xbe,0xe0,0xfe,0xf6,0xfc};
+const char stay[4]={0xFE,0xFD,0xFB,0xF7};
 
-#define TMR0_rst TMR0H = 0xEC, TMR0L = 0x82, PIR0bits.TMR0IF = 0x00
-//#define TMR0_rst TMR0H = 0xDF, TMR0L = 0x70, PIR0bits.TMR0IF = 0x00
-
-const unsigned char digital_decode[10] = {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
-const unsigned char LED_select_signal[4] = {0xEE, 0xDD, 0xBB, 0x77};
-// Display LEDs Select decode
-unsigned char interrupt_count = 0;
-unsigned char display_signal[4] = {0xFC, 0x60, 0x03, 0x04};
-
-unsigned int last_state = 0;
-unsigned int current_state = 0;
-unsigned int triggered_flaged = 0;
-unsigned char key_buf;
-unsigned char key_num = 0x00;
-
-void keyboard_scan(void)
-{
-    key_buf = 0;
-    PORTB = 0x0f;
-    current_state = 0xFF;
-
-    if (PORTB != 0x0f)
-    {
-        if (PORTBbits.RB0 == 0)
-        {
-            current_state = ~128;
-        }
-        else if (PORTBbits.RB1 == 0)
-        {
-            current_state = `256;
-        }
-        else if (PORTBbits.RB2 == 0)
-        {
-            current_state = ~512;
-        }
-        else if (PORTBbits.RB3 == 0)
-        {
-            current_state = ~1024;
-        }
-    }
-    else
-    {
-        PORTB = 0x07; //0000 0111
-        if (PORTB != 0x07)
-        {
-            if (PORTBbits.RB0 == 0)
-            {
-                current_state = ~4;
-            }
-            else if (PORTBbits.RB1 == 0)
-            {
-                current_state = ~16;
-            }
-            else if (PORTBbits.RB2 == 0)
-            {
-                current_state = ~64;
-            }
-        }
-        else
-        {
-            PORTB = 0x03; //0000 0011
-            if (PORTB != 0x03)
-            {
-                if (PORTBbits.RB0 == 0)
-                {
-                    current_state = ~2;
-                }
-                else
-                {
-                    current_state = ~8;
-                }
-            }
-            else
-            {
-                PORTB = 0x01;      //0000 0001
-                if (PORTB != 0x01) //0000 0001
-                {
-                    current_state = ~32;
-                }
-            }
-        }
-    }
-
-    triggered_flaged |= (last_state & (~current_state));
-    last_state = current_state;
-}
-
-void __interrupt() isr(void)
-{
-    // reset TMR0
-    TMR0_rst;
-    interrupt_count++;
-    // clear PORTC
-    PORTC = 0x00;
-    PORTA = LED_select_signal[interrupt_count & 0x03];
-    PORTC = display_signal[interrupt_count & 0x03];
-
-    if (interrupt_count & 0x03)
-    {
-        keyboard_scan();
-        display_signal[0] = triggered_flaged & 0xFF;
-        display_signal[1] = triggered_flaged >> 8;
-    }
-}
-
-void port_init(void)
-{
-    // init PORTC
-    ANSELA = 0x00;
-    LATA = 0x00;
+void PORTinit(void) {
     TRISA = 0x00;
-    ANSELC = 0x00;
-    LATC = 0x00;
-    TRISC = 0x00;
-    ANSELB = 0x00;
+    TRISC = 0x00;     
+    ANSELA = 0;
+    ANSELC = 0;
+    PORTA = 0xFF;
+    PORTC = 0x00;
 }
 
-void int_tmr_init(void)
-{
-    // init interrupt
-    INTCONbits.GIE = 1;
-    // global interrupt     enable
-    INTCONbits.PEIE = 0;
-    // peripheral interrupt disable
-    INTCONbits.INTEDG = 1;
-    // interrupt            rising edge
-    PIE0bits.TMR0IE = 1;
-    // Timer0 interrupt     enable
-
-    // init TMR0
-    T0CON0 = 0xD0;
-    T0CON1 = 0x40;
-    TMR0_rst;
+void delay(void) {
+    int i=100;
+    while(i--);
 }
 
-void setup(void)
-{
-    port_init();
-    int_tmr_init();
-}
-
-void loop(void)
-{
-    if (triggered_flaged)
-    {
-        for (int i = 1; i < 11; i++)
-        {
-            display_signal[0] = digital_decode[i - 1];
+void main(void) {
+    PORTinit();
+    int en = 0;
+    while (1) {
+        PORTA=0b11111111;
+        switch (PORTA) {
+            case 0b11111110: PORTC=decode[6]; break;//S7
+            case 0b11111101: PORTC=decode[7]; break;//S8
+            case 0b11111011: PORTC=decode[8]; break;//S9
+            case 0b11110111: PORTC=decode[9]; break;//S10
+            default: en = 0;
         }
-    }
-}
 
-void main(void)
-{
-    setup();
-    while (1)
-    {
-        loop();
+        if (en == 0) {
+            PORTA=0b11110111;
+            delay();
+            switch (PORTA) {
+                case 0b11110110: PORTC=decode[1]; break;//S2
+                case 0b11110101: PORTC=decode[3]; break;//S4
+                case 0b11110011: PORTC=decode[5]; break;//S6
+                default: en = 0;
+            }
+        }
+
+        if (en == 0) {
+            PORTA=0b11111011;
+            delay();
+            switch (PORTA) {
+                case 0b11111010: PORTC=decode[0]; break;//S1
+                case 0b11111001: PORTC=decode[2]; break;//S3
+                default: en = 0;
+            }
+        }
+
+        if (en == 0) {
+            PORTA=0b11111101;
+            delay();
+            if (PORTA == 0b11111100) {
+                PORTC=decode[4];//S5
+            }
+        }
     }
     return;
 }
