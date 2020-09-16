@@ -195,8 +195,12 @@ inline void frame_switch(void)
 }
 unsigned char key = 0x00;
 unsigned int last_state, current_state, key_press, key_loose;
-
-void scan(void)
+unsigned char scan_period;
+unsigned char press_count[10] = {0x00};
+unsigned char is_pressed;
+unsigned char is_double;
+unsigned char key_buf;
+void key_scan(void)
 {
     current_state = 0x00;
     PORTB = 0x0f;
@@ -243,6 +247,18 @@ void scan(void)
             }
         }
     }
+    if (is_pressed)
+    {
+        scan_period++;
+    }
+    else if (scan_period < 30)
+    {
+        scan_period++;
+    }
+    else
+    {
+        scan_period = 0xFF;
+    }
 
     current_state = (1 << key);
     key_press |= (~last_state) & current_state;
@@ -261,18 +277,15 @@ void __interrupt() isr(void)
     PORTA = LED_select_signal[interrupt_count & 0x03];
     PORTC = display_signal[interrupt_count & 0x03];
 
-    //    if (display_ctrl != 4)
-    //    {
     if (!(interrupt_count & 0x03))
     {
         repeat_num++;
         frame_switch();
     }
-    //    }
 
     if ((interrupt_count & 0x03) == 2)
     {
-        scan();
+        key_scan();
     }
 }
 
@@ -335,7 +348,6 @@ void start_disp(void)
     {
     };
     display_cache_clear();
-    //    frame_repeat_num = 50;
 }
 unsigned char key_num;
 
@@ -347,6 +359,8 @@ void key_init(void)
     current_state = 0;
     key_press = 0;
     key_loose = 0;
+    is_pressed = 0;
+    is_double = 0;
 }
 
 void setup(void)
@@ -357,22 +371,53 @@ void setup(void)
     key_init();
     display_real_time;
 }
-unsigned char num_buf;
 
 void loop(void)
 {
 
     if (key_press << 1)
     {
-        num_buf = digital_decode[key];
         key_press = 0;
+        is_pressed = 1;
+
+        if (scan_period == 0xFF)
+        {
+            // single click
+            display_signal[0] = digital_decode[key];
+            key_buf = key;
+            press_count[key]++;
+            scan_period = 0;
+        }
+        else
+        {
+            // double click
+            is_double = 1;
+        }
     }
     if (key_loose << 1)
     {
-        display_signal[key_num & 0x03] = num_buf;
-        key_num++;
-        key_press = 0;
+
         key_loose = 0;
+        is_pressed = 0;
+        if (is_double)
+        {
+            display_signal[1] = digital_decode[2];
+        }
+        else if (scan_period > 30)
+        {
+            display_signal[1] = digital_decode[1];
+        }
+        else
+        {
+            display_signal[1] = digital_decode[0];
+        }
+        if (press_count[key_buf] == 100)
+        {
+            press_count[key_buf] = 0x00;
+        }
+        display_signal[2] = digital_decode[press_count[key_buf] / 10];
+        display_signal[3] = digital_decode[press_count[key_buf] % 10];
+        is_double = 0;
     }
 }
 
