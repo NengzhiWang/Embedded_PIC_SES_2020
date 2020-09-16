@@ -48,19 +48,35 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 #endif
-
-/*
- * ISR definition 
- */
- /*
+int i,j=0;
 void __interrupt() isr(void)
 {
-    
+    PORTC=0;
+    const char decode[10]={0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
+    const char stay[4]={0xFE,0xFD,0xFB,0xF7};
+    i++;
+    j=i/333;
+    PORTA = stay[i%4];
+    PORTC = decode[(i%4+j)%10]; 
+    PIR0bits.TMR0IF =0;//clear,if not,keep interrupting
 }
- */
 
 void main(void) {
-
+    TRISA = 0x00; 
+    TRISC = 0x00;
+    ANSELA = 0;
+    ANSELC = 0;
+    PORTA = 0xFF; //for R
+    PORTC = 0; //for S
+    //3200 3.2ms
+    TMR0H = 0xA; //10
+    TMR0L = 0x00;
+    T0CON0 = 0xC9;//B'11001001' 1:10 
+    T0CON1 = 0x45;//B'01000101'  32
     
+    INTCONbits.GIE=1; //global interrupt,enables all active interrupts
+    PIR0bits.TMR0IF = 0;//clear TMR0 Interrupt flag
+    PIE0bits.TMR0IE = 1;//enable TMR0 Interrupt flag
+    while (1);  
     return;
 }
