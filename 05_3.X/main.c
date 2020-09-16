@@ -48,7 +48,6 @@
 // Use project enums instead of #define for ON and OFF.
 #endif
 #define TMR0_rst TMR0H = 0xEC, TMR0L = 0x82, PIR0bits.TMR0IF = 0x00
-
 const unsigned char digital_decode[10] = {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
 const unsigned int LED_select_signal[4] = {0xEE, 0xDD, 0xBB, 0x77};
 // Display LEDs Select decode
@@ -63,9 +62,11 @@ unsigned char key = 0x00;
 unsigned int interval = 0;
 unsigned int onecount = 0;
 
-void scan(void) {
+void scan(void)
+{
     PORTB = 0x0f;
-    if (PORTB != 0x0f) {
+    if (PORTB != 0x0f)
+    {
         if (PORTBbits.RB0 == 0)
             key = 7;
         else if (PORTBbits.RB1 == 0)
@@ -74,25 +75,33 @@ void scan(void) {
             key = 9;
         else if (PORTBbits.RB3 == 0)
             key = 10;
-    } else {
+    }
+    else
+    {
         PORTB = 0x07; //0000 0111
-        if (PORTB != 0x07) {
+        if (PORTB != 0x07)
+        {
             if (PORTBbits.RB0 == 0)
                 key = 2;
             else if (PORTBbits.RB1 == 0)
                 key = 4;
             else if (PORTBbits.RB2 == 0)
                 key = 6;
-        } else {
+        }
+        else
+        {
             PORTB = 0x03; //0000 0011
-            if (PORTB != 0x03) {
+            if (PORTB != 0x03)
+            {
                 if (PORTBbits.RB0 == 0)
                     key = 1;
                 else
                     key = 3;
-            } else {
-                PORTB = 0x01; //0000 0001
-                if (PORTB != 0x01)//0000 0001
+            }
+            else
+            {
+                PORTB = 0x01;      //0000 0001
+                if (PORTB != 0x01) //0000 0001
                     key = 5;
                 else
                     key = 0;
@@ -103,17 +112,18 @@ void scan(void) {
     if (interval != 0)
         interval = interval - 1;
 
-    if (key != 0) {
-        if (onecount != 0)//key is continued
+    if (key != 0)
+    {
+        if (onecount != 0) //key is continued
             onecount = onecount + 1;
-        else if (onecount == 0)//key is started
+        else if (onecount == 0) //key is started
         {
-            if (interval >= 350)//key is too closed
+            if (interval >= 350) //key is too closed
             {
                 one_or_two = 1;
             }
 
-            if (one_or_two == 0)//key is not too closed
+            if (one_or_two == 0) //key is not too closed
             {
                 count[key - 1] = count[key - 1] + 1;
                 interval = 400;
@@ -125,16 +135,18 @@ void scan(void) {
             long_or_short = 1;
         else
             long_or_short = 0;
-    } else {
-        if (onecount != 0)//key is ended
+    }
+    else
+    {
+        if (onecount != 0) //key is ended
         {
             onecount = 0;
         }
         one_or_two = 0;
     }
 }
-
-void __interrupt() isr(void) {
+void __interrupt() isr(void)
+{
     // reset TMR0
     TMR0_rst;
     interrupt_count++;
@@ -143,10 +155,31 @@ void __interrupt() isr(void) {
     PORTA = LED_select_signal[interrupt_count & 0x03];
 
     scan();
-
+    if (key == 0)
+    {
+        PORTC = display_signal[interrupt_count & 0x03];
+    }
+    else if (key == 10)
+    {
+        display_signal[0] = digital_decode[0];
+        display_signal[1] = digital_decode[count[key - 1] % 10];
+        display_signal[2] = digital_decode[one_or_two];
+        display_signal[3] = digital_decode[long_or_short];
+        PORTC = display_signal[interrupt_count & 0x03];
+    }
+    else
+    {
+        display_signal[0] = digital_decode[key];
+        display_signal[1] = digital_decode[count[key - 1] % 10];
+        display_signal[2] = digital_decode[one_or_two];
+        display_signal[3] = digital_decode[long_or_short];
+        PORTC = display_signal[interrupt_count & 0x03];
+    }
+    PORTC = display_signal[interrupt_count & 0x03];
 }
 
-void port_init(void) {
+void port_init(void)
+{
     // init PORTC
     ANSELA = 0x00;
     LATA = 0x00;
@@ -159,7 +192,8 @@ void port_init(void) {
     TRISC = 0x00;
 }
 
-void int_tmr_init(void) {
+void int_tmr_init(void)
+{
     // init interrupt
     INTCONbits.GIE = 1;
     // global interrupt     enable
@@ -176,34 +210,21 @@ void int_tmr_init(void) {
     TMR0_rst;
 }
 
-void setup(void) {
+void setup(void)
+{
     port_init();
     int_tmr_init();
 }
 
-void loop(void) {
-
-    if (key == 0) {
-        PORTC = display_signal[interrupt_count & 0x03];
-    } else if (key == 10) {
-        display_signal[0] = digital_decode[0];
-        display_signal[1] = digital_decode[count[key - 1] % 10];
-        display_signal[2] = digital_decode[one_or_two];
-        display_signal[3] = digital_decode[long_or_short];
-        PORTC = display_signal[interrupt_count & 0x03];
-    } else {
-        display_signal[0] = digital_decode[key];
-        display_signal[1] = digital_decode[count[key - 1] % 10];
-        display_signal[2] = digital_decode[one_or_two];
-        display_signal[3] = digital_decode[long_or_short];
-        PORTC = display_signal[interrupt_count & 0x03];
-    }
-    PORTC = display_signal[interrupt_count & 0x03];
+void loop(void)
+{
 }
 
-void main(void) {
+void main(void)
+{
     setup();
-    while (1) {
+    while (1)
+    {
         loop();
     }
     return;
