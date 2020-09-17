@@ -47,64 +47,435 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 #endif
-const char decode[10] = {0x60,0xda,0xf2,0x66,0xb6,0xbe,0xe0,0xfe,0xf6,0xfc};
-const char stay[4]={0xFE,0xFD,0xFB,0xF7};
 
-void PORTinit(void) {
-    TRISA = 0x00;
-    TRISC = 0x00;     
-    ANSELA = 0;
-    ANSELC = 0;
-    PORTA = 0xFF;
+#define TMR0_rst TMR0H = 0xEC, TMR0L = 0x82, PIR0bits.TMR0IF = 0x00
+//#define TMR0_rst TMR0H = 0xDF, TMR0L = 0x70, PIR0bits.TMR0IF = 0x00
+
+const unsigned char digital_decode[10] = {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
+const unsigned char LED_select_signal[4] = {0xEE, 0xDD, 0xBB, 0x77};
+// Display LEDs Select decode
+unsigned char repeat_num;       //
+unsigned char frame_repeat_num; // max number of a frame repeat
+unsigned char interrupt_count = 0;
+
+unsigned char display_signal[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+
+unsigned char display_cache[128] = {
+    28, 0xFC, 238, 0xFC, // LOAD
+    28, 0xFC, 238, 0xFC, // LOAD
+    28, 0xFC, 238, 0xFC, // LOAD
+    28, 0xFC, 238, 0xFC, // LOAD
+    0x00, 0x00, 0x00, 0x00,
+    2, 0x00, 0x00, 0x00,
+    2, 2, 0x00, 0x00,
+    2, 2, 2, 0x00,
+    2, 2, 2, 2,
+    0x00, 0x00, 0x00, 0x00,
+    182, 158, 182, 0, // SES
+    182, 158, 182, 0, // SES
+    182, 158, 182, 0, // SES
+    182, 158, 182, 0, // SES
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xFC, 0xF7, 0x60, 0xE0,
+    0xFC, 0xF7, 0x60, 0xE0,
+    0xFC, 0xF7, 0x60, 0xE0,
+    0xFC, 0xF7, 0x60, 0xE0,
+    0x02, 0x02, 0x02, 0x02,
+    0x00, 0x00, 0x00, 0x00};
+
+unsigned char sum_frame_num = 24; // number of frame, in the display signal cache
+//unsigned char display_ctrl = 0b00000001;
+unsigned char display_ctrl;
+/*
+    bit 0
+        1   shift 4
+        0   shift 1
+    bit 1
+        1   loop
+        0   clear
+    bit 2
+        0   frame
+        1   real time
+ */
+
+#define display_clear_4 display_ctrl = 3, repeat_num = 0
+#define display_clear_1 display_ctrl = 2, repeat_num = 0
+#define display_loop_4 display_ctrl = 1, repeat_num = 0, frame_num = 0, frame_start = 0, frame_cache_num = (dis_cache_size >> 2)
+#define display_loop_1 display_ctrl = 0, repeat_num = 0, frame_num = 0, frame_start = 0, frame_cache_num = dis_cache_size
+#define display_real_time display_ctrl = 4
+unsigned char dis_cache_size = 128; // byte saved in cache
+unsigned char frame_cache_num;
+unsigned char frame_num;   // index of displaying frame
+unsigned char frame_start; // start index in display signal cache
+// used when loading data from display signal cache to register
+
+unsigned char frame_refresh_enable = 0;
+unsigned char display_write_in = 0x00;
+
+inline void frame_switch(void)
+{
+    if (display_ctrl != 4)
+    {
+        if (repeat_num == frame_repeat_num)
+        {
+            repeat_num = 0;
+
+            if (display_ctrl & 0x02)
+            {
+
+                if (display_ctrl & 0x01) // shift 4 byte once
+                {
+                    display_signal[0] = display_cache[0];
+                    display_signal[1] = display_cache[1];
+                    display_signal[2] = display_cache[2];
+                    display_signal[3] = display_cache[3];
+                    for (unsigned char j = 0; j < dis_cache_size; j++)
+                    {
+                        display_cache[j] = display_cache[j + 4];
+                    }
+                    display_cache[dis_cache_size - 1] = 0x00;
+                    display_cache[dis_cache_size - 2] = 0x00;
+                    display_cache[dis_cache_size - 3] = 0x00;
+                    display_cache[dis_cache_size - 4] = 0x00;
+                    dis_cache_size -= 4;
+                }
+                else // shift 1 byte once
+                {
+                    display_signal[0] = display_cache[0];
+                    display_signal[1] = display_cache[1];
+                    display_signal[2] = display_cache[2];
+                    display_signal[3] = display_cache[3];
+
+                    for (unsigned char j = 0; j < dis_cache_size; j++)
+                    {
+                        display_cache[j] = display_cache[j + 1];
+                    }
+                    display_cache[dis_cache_size - 1] = 0x00;
+
+                    dis_cache_size--;
+                }
+            }
+            else
+            {
+                if (frame_num == sum_frame_num)
+                {
+                    frame_num = 0;
+                    frame_start = 0;
+                }
+                if (display_ctrl & 0x01)
+                {
+                    display_signal[0] = display_cache[frame_start];
+                    display_signal[1] = display_cache[frame_start + 1];
+                    display_signal[2] = display_cache[frame_start + 2];
+                    display_signal[3] = display_cache[frame_start + 3];
+                    frame_start += 4;
+                }
+                else
+                {
+                    frame_start = frame_num;
+                    for (unsigned char j = 0; j < 4; j++)
+                    {
+
+                        if (frame_num + j > frame_cache_num - 1)
+                        {
+                            display_signal[j] = display_cache[frame_start + j - frame_cache_num];
+                        }
+                        else
+                        {
+                            display_signal[j] = display_cache[frame_start + j];
+                        }
+                    }
+                }
+            }
+            frame_num++;
+        }
+    }
+}
+unsigned char key = 0x00;
+unsigned int last_state, current_state, key_press, key_loose;
+
+unsigned char press_count[10] = {0x00};
+unsigned char is_press;
+unsigned char is_loose;
+unsigned char is_double;
+unsigned char key_buf;
+unsigned char key_num;
+unsigned char period_press;
+unsigned char period_loose;
+unsigned char key_action;
+//
+// 0    nothing
+// 1    short
+// 2    double
+// 3    long
+
+void key_scan(void)
+{
+    PORTB = 0x0f;
+    if (PORTB != 0x0f)
+    {
+        if (PORTBbits.RB0 == 0)
+            key = 7;
+        else if (PORTBbits.RB1 == 0)
+            key = 8;
+        else if (PORTBbits.RB2 == 0)
+            key = 9;
+        else if (PORTBbits.RB3 == 0)
+            key = 0;
+    }
+    else
+    {
+        PORTB = 0x07; //0000 0111
+        if (PORTB != 0x07)
+        {
+            if (PORTBbits.RB0 == 0)
+                key = 2;
+            else if (PORTBbits.RB1 == 0)
+                key = 4;
+            else if (PORTBbits.RB2 == 0)
+                key = 6;
+        }
+        else
+        {
+            PORTB = 0x03; //0000 0011
+            if (PORTB != 0x03)
+            {
+                if (PORTBbits.RB0 == 0)
+                    key = 1;
+                else
+                    key = 3;
+            }
+            else
+            {
+                PORTB = 0x01;      //0000 0001
+                if (PORTB != 0x01) //0000 0001
+                    key = 5;
+                else
+                    key = 15;
+            }
+        }
+    }
+}
+
+void key_action_scan(void)
+{
+    current_state = 0x00;
+    key_scan();
+    if (is_press)
+    {
+        period_press++;
+    }
+    if (is_loose)
+    {
+        period_loose++;
+    }
+
+    current_state = (1 << key);
+    key_press |= (~last_state) & current_state;
+    key_loose |= last_state & (~current_state);
+    last_state = current_state;
+}
+
+void __interrupt() isr(void)
+{
+    // reset TMR0
+    TMR0_rst;
+    interrupt_count++;
+    // clear PORTC
     PORTC = 0x00;
+    /************display part************/
+    PORTA = LED_select_signal[interrupt_count & 0x03];
+    PORTC = display_signal[interrupt_count & 0x03];
+
+    if (!(interrupt_count & 0x03))
+    {
+        repeat_num++;
+        frame_switch();
+    }
+
+    if ((interrupt_count & 0x03) == 2)
+    {
+        key_action_scan();
+    }
 }
 
-void delay(void) {
-    int i=100;
-    while(i--);
+void display_cache_push_back()
+{
+    //    if (display_ctrl & 0x02)
+    // can only push display data in clear mode
+
+    display_cache[dis_cache_size] = display_write_in;
+    dis_cache_size++;
+    display_write_in = 0x00;
 }
 
-void main(void) {
-    PORTinit();
-    int en = 0;
-    while (1) {
-        PORTA=0b11111111;
-        switch (PORTA) {
-            case 0b11111110: PORTC=decode[6]; break;//S7
-            case 0b11111101: PORTC=decode[7]; break;//S8
-            case 0b11111011: PORTC=decode[8]; break;//S9
-            case 0b11110111: PORTC=decode[9]; break;//S10
-            default: en = 0;
-        }
+void display_cache_clear(void)
+{
+    for (unsigned short j = 0; j < 128; j++)
+    {
+        display_cache[j] = 0x00;
+    }
+    dis_cache_size = 0;
+}
 
-        if (en == 0) {
-            PORTA=0b11110111;
-            delay();
-            switch (PORTA) {
-                case 0b11110110: PORTC=decode[1]; break;//S2
-                case 0b11110101: PORTC=decode[3]; break;//S4
-                case 0b11110011: PORTC=decode[5]; break;//S6
-                default: en = 0;
+void port_init(void)
+{
+    // init PORTC
+    ANSELA = 0x00;
+    LATA = 0x00;
+    TRISA = 0x00;
+    ANSELB = 0x00;
+    LATB = 0x00;
+    TRISB = 0x00;
+    ANSELC = 0x00;
+    LATC = 0x00;
+    TRISC = 0x00;
+}
+
+void int_tmr_init(void)
+{
+    // init interrupt
+    INTCONbits.GIE = 1;
+    // global interrupt     enable
+    INTCONbits.PEIE = 0;
+    // peripheral interrupt disable
+    INTCONbits.INTEDG = 1;
+    // interrupt            rising edge
+    PIE0bits.TMR0IE = 1;
+    // Timer0 interrupt     enable
+
+    // init TMR0
+    T0CON0 = 0xD0;
+    T0CON1 = 0x40;
+    TMR0_rst;
+}
+
+void start_disp(void)
+{
+    frame_repeat_num = 5;
+    display_clear_4;
+    while (dis_cache_size)
+    {
+    };
+    display_cache_clear();
+}
+
+void key_init(void)
+{
+    key = 0;
+    key_num = 0;
+    last_state = 0;
+    current_state = 0;
+    key_press = 0;
+    key_loose = 0;
+    is_press = 0;
+    is_loose = 0;
+    is_double = 0;
+    period_press = 0;
+    period_loose = 0;
+}
+
+void setup(void)
+{
+    port_init();
+    int_tmr_init();
+    start_disp();
+    key_init();
+    display_real_time;
+}
+
+void loop(void)
+{
+
+    if (key_press << 1)
+    {
+        key_press = 0;
+        is_press = 1;
+        is_loose = 0;
+        period_press = 0;
+
+        if ((period_loose > 30) || (key_buf != key) || key_action == 3)
+        {
+            // single click or quick click another key
+            period_loose = 0;
+            key_action = 1;
+            // display_signal[1] = digital_decode[1];
+            key_buf = key;
+            display_signal[0] = digital_decode[key_buf];
+            press_count[key_buf]++;
+            if (press_count[key_buf] == 100)
+            {
+                press_count[key_buf] = 0x00;
+            }
+            display_signal[2] = digital_decode[press_count[key_buf] / 10];
+            display_signal[3] = digital_decode[press_count[key_buf] % 10];
+        }
+        else
+        {
+            // double click
+            is_double = 1;
+
+            key_action = 2;
+            // display_signal[1] = digital_decode[2];
+        }
+    }
+    if (key_loose << 1)
+    {
+        key_loose = 0;
+        is_press = 0;
+        is_loose = 1;
+        period_loose = 0;
+        is_double = 0;
+    }
+
+    if (key_action == 1 && period_loose == 30)
+    {
+        key_action = 4;
+        period_loose = 0;
+    }
+
+    if (period_press > 30)
+    {
+        if (!is_double && key_action != 2)
+        {
+            key_action = 3;
+        }
+        else if (is_double)
+        {
+            if (key_action == 1)
+            {
+                key_action = 2;
             }
         }
+    }
 
-        if (en == 0) {
-            PORTA=0b11111011;
-            delay();
-            switch (PORTA) {
-                case 0b11111010: PORTC=decode[0]; break;//S1
-                case 0b11111001: PORTC=decode[2]; break;//S3
-                default: en = 0;
-            }
-        }
+    if (key_action == 1)
+    {
+        display_signal[1] = digital_decode[0];
+    }
+    else if (key_action == 2)
+    {
+        display_signal[1] = digital_decode[2];
+    }
+    else if (key_action == 3)
+    {
+        display_signal[1] = digital_decode[3];
+    }
+    else if (key_action == 4)
+    {
+        display_signal[1] = digital_decode[1];
+    }
+}
 
-        if (en == 0) {
-            PORTA=0b11111101;
-            delay();
-            if (PORTA == 0b11111100) {
-                PORTC=decode[4];//S5
-            }
-        }
+void main(void)
+{
+    setup();
+    while (1)
+    {
+        loop();
     }
     return;
 }

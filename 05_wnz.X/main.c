@@ -63,29 +63,30 @@ unsigned char display_signal[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 unsigned char display_cache[128] = {
     28, 0xFC, 238, 0xFC, // LOAD
     28, 0xFC, 238, 0xFC, // LOAD
-
+    28, 0xFC, 238, 0xFC, // LOAD
+    28, 0xFC, 238, 0xFC, // LOAD
     0x00, 0x00, 0x00, 0x00,
-    16, 0x00, 0x00, 0x00,
-    16, 16, 0x00, 0x00,
-    16, 16, 16, 0x00,
-    16, 16, 16, 16,
-    16, 16, 16, 48,
-    16, 16, 16, 112,
-    16, 16, 16, 240,
-    16, 16, 144, 240,
-    16, 144, 144, 240,
-    144, 144, 144, 240,
-    148, 144, 144, 240,
-    156, 144, 144, 240,
-
+    2, 0x00, 0x00, 0x00,
+    2, 2, 0x00, 0x00,
+    2, 2, 2, 0x00,
+    2, 2, 2, 2,
     0x00, 0x00, 0x00, 0x00,
     182, 158, 182, 0, // SES
+    182, 158, 182, 0, // SES
+    182, 158, 182, 0, // SES
+    182, 158, 182, 0, // SES
     0xDA, 0xFC, 0xDA, 0xFC,
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xFC, 0xF7, 0x60, 0xE0,
+    0xFC, 0xF7, 0x60, 0xE0,
+    0xFC, 0xF7, 0x60, 0xE0,
     0xFC, 0xF7, 0x60, 0xE0,
     0x02, 0x02, 0x02, 0x02,
     0x00, 0x00, 0x00, 0x00};
 
-unsigned char sum_frame_num = 22; // number of frame, in the display signal cache
+unsigned char sum_frame_num = 24; // number of frame, in the display signal cache
 //unsigned char display_ctrl = 0b00000001;
 unsigned char display_ctrl;
 /*
@@ -195,14 +196,24 @@ inline void frame_switch(void)
 }
 unsigned char key = 0x00;
 unsigned int last_state, current_state, key_press, key_loose;
-unsigned char scan_period;
+
 unsigned char press_count[10] = {0x00};
-unsigned char is_pressed;
+unsigned char is_press;
+unsigned char is_loose;
 unsigned char is_double;
 unsigned char key_buf;
+unsigned char key_num;
+unsigned char period_press;
+unsigned char period_loose;
+unsigned char key_action;
+//
+// 0    nothing
+// 1    short
+// 2    double
+// 3    long
+
 void key_scan(void)
 {
-    current_state = 0x00;
     PORTB = 0x0f;
     if (PORTB != 0x0f)
     {
@@ -247,17 +258,19 @@ void key_scan(void)
             }
         }
     }
-    if (is_pressed)
+}
+
+void key_action_scan(void)
+{
+    current_state = 0x00;
+    key_scan();
+    if (is_press)
     {
-        scan_period++;
+        period_press++;
     }
-    else if (scan_period < 30)
+    if (is_loose)
     {
-        scan_period++;
-    }
-    else
-    {
-        scan_period = 0xFF;
+        period_loose++;
     }
 
     current_state = (1 << key);
@@ -285,7 +298,7 @@ void __interrupt() isr(void)
 
     if ((interrupt_count & 0x03) == 2)
     {
-        key_scan();
+        key_action_scan();
     }
 }
 
@@ -349,7 +362,6 @@ void start_disp(void)
     };
     display_cache_clear();
 }
-unsigned char key_num;
 
 void key_init(void)
 {
@@ -359,8 +371,11 @@ void key_init(void)
     current_state = 0;
     key_press = 0;
     key_loose = 0;
-    is_pressed = 0;
+    is_press = 0;
+    is_loose = 0;
     is_double = 0;
+    period_press = 0;
+    period_loose = 0;
 }
 
 void setup(void)
@@ -378,46 +393,80 @@ void loop(void)
     if (key_press << 1)
     {
         key_press = 0;
-        is_pressed = 1;
+        is_press = 1;
+        is_loose = 0;
+        period_press = 0;
 
-        if (scan_period == 0xFF)
+        if ((period_loose > 30) || (key_buf != key) || key_action == 3)
         {
-            // single click
-            display_signal[0] = digital_decode[key];
+            // single click or quick click another key
+            period_loose = 0;
+            key_action = 1;
+            // display_signal[1] = digital_decode[1];
             key_buf = key;
-            press_count[key]++;
-            scan_period = 0;
+            display_signal[0] = digital_decode[key_buf];
+            press_count[key_buf]++;
+            if (press_count[key_buf] == 100)
+            {
+                press_count[key_buf] = 0x00;
+            }
+            display_signal[2] = digital_decode[press_count[key_buf] / 10];
+            display_signal[3] = digital_decode[press_count[key_buf] % 10];
         }
         else
         {
             // double click
             is_double = 1;
+
+            key_action = 2;
+            // display_signal[1] = digital_decode[2];
         }
     }
     if (key_loose << 1)
     {
-
         key_loose = 0;
-        is_pressed = 0;
-        if (is_double)
-        {
-            display_signal[1] = digital_decode[2];
-        }
-        else if (scan_period > 30)
-        {
-            display_signal[1] = digital_decode[1];
-        }
-        else
-        {
-            display_signal[1] = digital_decode[0];
-        }
-        if (press_count[key_buf] == 100)
-        {
-            press_count[key_buf] = 0x00;
-        }
-        display_signal[2] = digital_decode[press_count[key_buf] / 10];
-        display_signal[3] = digital_decode[press_count[key_buf] % 10];
+        is_press = 0;
+        is_loose = 1;
+        period_loose = 0;
         is_double = 0;
+    }
+
+    if (key_action == 1 && period_loose == 30)
+    {
+        key_action = 4;
+        period_loose = 0;
+    }
+
+    if (period_press > 30)
+    {
+        if (!is_double && key_action != 2)
+        {
+            key_action = 3;
+        }
+        else if (is_double)
+        {
+            if (key_action == 1)
+            {
+                key_action = 2;
+            }
+        }
+    }
+
+    if (key_action == 1)
+    {
+        display_signal[1] = digital_decode[0];
+    }
+    else if (key_action == 2)
+    {
+        display_signal[1] = digital_decode[2];
+    }
+    else if (key_action == 3)
+    {
+        display_signal[1] = digital_decode[3];
+    }
+    else if (key_action == 4)
+    {
+        display_signal[1] = digital_decode[1];
     }
 }
 
