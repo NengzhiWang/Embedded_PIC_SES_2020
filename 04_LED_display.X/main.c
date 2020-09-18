@@ -47,95 +47,170 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 #endif
-#define TMR0H_rst 0xEC
-#define TMR0L_rst 0x82
 
-#define TMR0_rst TMR0H = TMR0H_rst, TMR0L = TMR0L_rst, PIR0bits.TMR0IF = 0x00
-/*
- * ISR definition 
- */
-const unsigned int digital_decode[10] = {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
-// const unsigned int Char_Decode[128];
-// decode list for '0' to '1'
-const unsigned int LedSel[4] = {0xEE, 0xDD, 0xBB, 0x77};
+#define TMR0_rst TMR0H = 0xEC, TMR0L = 0x82, PIR0bits.TMR0IF = 0x00
+//#define TMR0_rst TMR0H = 0xDF, TMR0L = 0x70, PIR0bits.TMR0IF = 0x00
+
+const unsigned char digital_decode[10] = {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
+const unsigned char LED_select_signal[4] = {0xEE, 0xDD, 0xBB, 0x77};
 // Display LEDs Select decode
-unsigned int repeat_num;
-const unsigned int frame_repeat_num = 50;
-unsigned int interrupt_count = 0;
+unsigned char repeat_num; //
+unsigned char frame_repeat_num; // max number of a frame repeat
+unsigned char interrupt_count = 0;
 
-unsigned int display_signal[4];
+unsigned char display_signal[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 
-unsigned int display_cache[40] = {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
-unsigned int sum_frame_num = 10; // 保存在chche中帧的数量
-unsigned int dis_shift = 1;     // 每次刷新位移的数目 1 or 4
-unsigned int dis_byte_num = 10;  // 保存在cache中的待显示的字节数
-unsigned int frame_num;   // 当前正在显示的帧编号
-unsigned int frame_start; // 起始帧地址
+unsigned char display_cache[128] = {
+    28, 0xFC, 238, 0xFC, // LOAD
+    29, 0xFC, 238, 0xFC, // LOAD
+    29, 0xFD, 238, 0xFC, // LOAD
+    29, 0xFD, 239, 0xFC, // LOAD
+    29, 0xFD, 239, 0xFD, // LOAD
+    182, 158, 182, 0, // SES
 
-void __interrupt() isr(void)
-{
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xDA, 0xFC, 0xDA, 0xFC,
+    0xFC, 0xF7, 0x60, 0xE0,
+    0xFC, 0xF7, 0x60, 0xE0,
+    0x02, 0x02, 0x02, 0x02,
+    0x00, 0x00, 0x00, 0x00
+};
+unsigned char dis_cache_size = 52; // byte saved in cache
+unsigned char sum_frame_num = 13; // number of frame, in the display signal cache
+//unsigned char display_ctrl = 0b00000001;
+unsigned char display_ctrl;
+/*
+    bit 0
+        1   shift 4
+        0   shift 1
+    bit 1
+        1   loop
+        0   clear
+    bit 2
+        0   frame
+        1   real time
+ */
+
+#define display_clear_4 display_ctrl = 3, repeat_num = 0
+#define display_clear_1 display_ctrl = 2, repeat_num = 0
+#define display_loop_4 display_ctrl = 1, repeat_num = 0, frame_num = 0, frame_start = 0, frame_cache_num = (dis_cache_size >> 2)
+#define display_loop_1 display_ctrl = 0, repeat_num = 0, frame_num = 0, frame_start = 0, frame_cache_num = dis_cache_size
+#define display_real_time display_ctrl = 4
+unsigned char frame_cache_num;
+unsigned char frame_num; // index of displaying frame
+unsigned char frame_start; // start index in display signal cache
+// used when loading data from display signal cache to register
+
+unsigned char frame_refresh_enable = 0;
+unsigned char display_write_in = 0x00;
+
+void frame_switch(void) {
+    if (display_ctrl != 4) {
+        if (repeat_num == frame_repeat_num) {
+            repeat_num = 0;
+
+            if (display_ctrl & 0x02) {
+
+                if (display_ctrl & 0x01) // shift 4 byte once
+                {
+                    display_signal[0] = display_cache[0];
+                    display_signal[1] = display_cache[1];
+                    display_signal[2] = display_cache[2];
+                    display_signal[3] = display_cache[3];
+                    for (unsigned char j = 0; j < dis_cache_size; j++) {
+                        display_cache[j] = display_cache[j + 4];
+                    }
+                    display_cache[dis_cache_size - 1] = 0x00;
+                    display_cache[dis_cache_size - 2] = 0x00;
+                    display_cache[dis_cache_size - 3] = 0x00;
+                    display_cache[dis_cache_size - 4] = 0x00;
+                    dis_cache_size -= 4;
+                } else // shift 1 byte once
+                {
+                    display_signal[0] = display_cache[0];
+                    display_signal[1] = display_cache[1];
+                    display_signal[2] = display_cache[2];
+                    display_signal[3] = display_cache[3];
+
+                    for (unsigned char j = 0; j < dis_cache_size; j++) {
+                        display_cache[j] = display_cache[j + 1];
+                    }
+                    display_cache[dis_cache_size - 1] = 0x00;
+
+                    dis_cache_size--;
+                }
+            } else {
+                if (frame_num == sum_frame_num) {
+                    frame_num = 0;
+                    frame_start = 0;
+                }
+                if (display_ctrl & 0x01) {
+                    display_signal[0] = display_cache[frame_start];
+                    display_signal[1] = display_cache[frame_start + 1];
+                    display_signal[2] = display_cache[frame_start + 2];
+                    display_signal[3] = display_cache[frame_start + 3];
+                    frame_start += 4;
+                } else {
+                    frame_start = frame_num;
+                    for (unsigned char j = 0; j < 4; j++) {
+
+                        if (frame_num + j > frame_cache_num - 1) {
+                            display_signal[j] = display_cache[frame_start + j - frame_cache_num];
+                        } else {
+                            display_signal[j] = display_cache[frame_start + j];
+                        }
+                    }
+                }
+            }
+            frame_num++;
+        }
+    }
+}
+
+void __interrupt() isr(void) {
     // reset TMR0
     TMR0_rst;
     interrupt_count++;
     // clear PORTC
     PORTC = 0x00;
-
-    if ((interrupt_count & 0x03) == 0x00)
-    {
-        repeat_num++;
-    }
-    PORTA = LedSel[interrupt_count & 0x03];
+    /************display part************/
+    PORTA = LED_select_signal[interrupt_count & 0x03];
     PORTC = display_signal[interrupt_count & 0x03];
 
-    if (repeat_num == frame_repeat_num)
-    {
-        repeat_num = 0;
-        if (frame_num == sum_frame_num)
-        {
-            frame_num = 0;
-            frame_start = 0;
-        }
-        if (dis_shift == 4)
-        {
-            display_signal[0] = display_cache[frame_start];
-            display_signal[1] = display_cache[frame_start + 1];
-            display_signal[2] = display_cache[frame_start + 2];
-            display_signal[3] = display_cache[frame_start + 3];
-            frame_start += 4;
-        }
-        else if (dis_shift == 1)
-        {
-            frame_start = frame_num;
-            for (int j = 0; j < 4; j++)
-            {
-                if (frame_num + j > dis_byte_num - 1)
-                {
-                    display_signal[j] = display_cache[frame_start + j - dis_byte_num];
-                }
-
-                else
-                {
-                    display_signal[j] = display_cache[frame_start + j];
-                }
-            }
-        }
-        frame_num++;
+    if (!(interrupt_count & 0x03)) {
+        repeat_num++;
+        frame_switch();
     }
 }
 
-void port_init(void)
-{
+void display_cache_push_back() {
+    //    if (display_ctrl & 0x02)
+    // can only push display data in clear mode
+
+    display_cache[dis_cache_size] = display_write_in;
+    dis_cache_size++;
+    display_write_in = 0x00;
+}
+
+void display_cache_clear(void) {
+    for (unsigned short j = 0; j < 128; j++) {
+        display_cache[j] = 0x00;
+    }
+    dis_cache_size = 0;
+}
+
+void port_init(void) {
     // init PORTC
     ANSELA = 0x00;
     LATA = 0x00;
     TRISA = 0x00;
+
     ANSELC = 0x00;
     LATC = 0x00;
     TRISC = 0x00;
 }
 
-void int_tmr_init(void)
-{
+void int_tmr_init(void) {
     // init interrupt
     INTCONbits.GIE = 1;
     // global interrupt     enable
@@ -145,36 +220,43 @@ void int_tmr_init(void)
     // interrupt            rising edge
     PIE0bits.TMR0IE = 1;
     // Timer0 interrupt     enable
-    /***********************************************************/
+
     // init TMR0
     T0CON0 = 0xD0;
     T0CON1 = 0x40;
     TMR0_rst;
 }
 
-void display_init(void)
-{
-    repeat_num = 0;
-    frame_num = 0;
-    frame_start = 0;
+void start_disp(void) {
+    frame_repeat_num = 1;
+    display_clear_4;
+    while (dis_cache_size) {
+    };
+    display_cache_clear();
 }
 
-void setup(void)
-{
+void digital_num_loop(void) {
+    frame_repeat_num = 1;
+    for (unsigned char i = 0; i < 10; i++) {
+        display_write_in = digital_decode[i];
+        display_cache_push_back();
+    }
+    display_loop_1;
+}
+
+void setup(void) {
     port_init();
     int_tmr_init();
-    display_init();
+    start_disp();
+    digital_num_loop();
 }
 
-void loop(void)
-{
+void loop(void) {
 }
 
-void main(void)
-{
+void main(void) {
     setup();
-    while (1)
-    {
+    while (1) {
         loop();
     }
     return;

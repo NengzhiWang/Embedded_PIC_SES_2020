@@ -62,31 +62,20 @@ unsigned char display_signal[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 
 unsigned char display_cache[128] = {
     28, 0xFC, 238, 0xFC, // LOAD
-    28, 0xFC, 238, 0xFC, // LOAD
-    28, 0xFC, 238, 0xFC, // LOAD
-    28, 0xFC, 238, 0xFC, // LOAD
-    0x00, 0x00, 0x00, 0x00,
-    2, 0x00, 0x00, 0x00,
-    2, 2, 0x00, 0x00,
-    2, 2, 2, 0x00,
-    2, 2, 2, 2,
-    0x00, 0x00, 0x00, 0x00,
-    182, 158, 182, 0, // SES
-    182, 158, 182, 0, // SES
-    182, 158, 182, 0, // SES
-    182, 158, 182, 0, // SES
+    29, 0xFC, 238, 0xFC, // LOAD
+    29, 0xFD, 238, 0xFC, // LOAD
+    29, 0xFD, 239, 0xFC, // LOAD
+    29, 0xFD, 239, 0xFD, // LOAD
+    182, 158, 182, 0,    // SES
+
     0xDA, 0xFC, 0xDA, 0xFC,
     0xDA, 0xFC, 0xDA, 0xFC,
-    0xDA, 0xFC, 0xDA, 0xFC,
-    0xDA, 0xFC, 0xDA, 0xFC,
-    0xFC, 0xF7, 0x60, 0xE0,
-    0xFC, 0xF7, 0x60, 0xE0,
     0xFC, 0xF7, 0x60, 0xE0,
     0xFC, 0xF7, 0x60, 0xE0,
     0x02, 0x02, 0x02, 0x02,
     0x00, 0x00, 0x00, 0x00};
-
-unsigned char sum_frame_num = 24; // number of frame, in the display signal cache
+unsigned char dis_cache_size = 52; // byte saved in cache
+unsigned char sum_frame_num = 13;  // number of frame, in the display signal cache
 //unsigned char display_ctrl = 0b00000001;
 unsigned char display_ctrl;
 /*
@@ -106,7 +95,6 @@ unsigned char display_ctrl;
 #define display_loop_4 display_ctrl = 1, repeat_num = 0, frame_num = 0, frame_start = 0, frame_cache_num = (dis_cache_size >> 2)
 #define display_loop_1 display_ctrl = 0, repeat_num = 0, frame_num = 0, frame_start = 0, frame_cache_num = dis_cache_size
 #define display_real_time display_ctrl = 4
-unsigned char dis_cache_size = 128; // byte saved in cache
 unsigned char frame_cache_num;
 unsigned char frame_num;   // index of displaying frame
 unsigned char frame_start; // start index in display signal cache
@@ -202,7 +190,6 @@ unsigned char is_press;
 unsigned char is_loose;
 unsigned char is_double;
 unsigned char key_buf;
-unsigned char key_num;
 unsigned char period_press;
 unsigned char period_loose;
 unsigned char key_action;
@@ -218,13 +205,21 @@ void key_scan(void)
     if (PORTB != 0x0f)
     {
         if (PORTBbits.RB0 == 0)
+        {
             key = 7;
+        }
         else if (PORTBbits.RB1 == 0)
+        {
             key = 8;
+        }
         else if (PORTBbits.RB2 == 0)
+        {
             key = 9;
+        }
         else if (PORTBbits.RB3 == 0)
+        {
             key = 0;
+        }
     }
     else
     {
@@ -232,11 +227,17 @@ void key_scan(void)
         if (PORTB != 0x07)
         {
             if (PORTBbits.RB0 == 0)
+            {
                 key = 2;
+            }
             else if (PORTBbits.RB1 == 0)
+            {
                 key = 4;
+            }
             else if (PORTBbits.RB2 == 0)
+            {
                 key = 6;
+            }
         }
         else
         {
@@ -244,17 +245,25 @@ void key_scan(void)
             if (PORTB != 0x03)
             {
                 if (PORTBbits.RB0 == 0)
+                {
                     key = 1;
+                }
                 else
+                {
                     key = 3;
+                }
             }
             else
             {
                 PORTB = 0x01;      //0000 0001
                 if (PORTB != 0x01) //0000 0001
+                {
                     key = 5;
+                }
                 else
+                {
                     key = 15;
+                }
             }
         }
     }
@@ -355,7 +364,7 @@ void int_tmr_init(void)
 
 void start_disp(void)
 {
-    frame_repeat_num = 5;
+    frame_repeat_num = 15;
     display_clear_4;
     while (dis_cache_size)
     {
@@ -366,7 +375,6 @@ void start_disp(void)
 void key_init(void)
 {
     key = 0;
-    key_num = 0;
     last_state = 0;
     current_state = 0;
     key_press = 0;
@@ -397,11 +405,11 @@ void loop(void)
         is_loose = 0;
         period_press = 0;
 
-        if ((period_loose > 30) || (key_buf != key) || key_action == 3)
+        if ((period_loose > 30) || (key_buf != key) || key_action != 0)
         {
             // single click or quick click another key
             period_loose = 0;
-            key_action = 1;
+            key_action = 0;
             // display_signal[1] = digital_decode[1];
             key_buf = key;
             display_signal[0] = digital_decode[key_buf];
@@ -416,10 +424,10 @@ void loop(void)
         else
         {
             // double click
-            is_double = 1;
-
-            key_action = 2;
-            // display_signal[1] = digital_decode[2];
+            if (key_action == 0)
+            {
+                key_action = 2;
+            }
         }
     }
     if (key_loose << 1)
@@ -428,45 +436,29 @@ void loop(void)
         is_press = 0;
         is_loose = 1;
         period_loose = 0;
-        is_double = 0;
     }
 
-    if (key_action == 1 && period_loose == 30)
+    if (key_action == 0 && period_loose > 30)
     {
-        key_action = 4;
+        key_action = 1;
         period_loose = 0;
     }
 
     if (period_press > 30)
     {
-        if (!is_double && key_action != 2)
+        if (key_action == 0)
         {
             key_action = 3;
-        }
-        else if (is_double)
-        {
-            if (key_action == 1)
-            {
-                key_action = 2;
-            }
+            period_loose = 0;
         }
     }
-
-    if (key_action == 1)
+    if (key_action != 0)
     {
-        display_signal[1] = digital_decode[0];
+        display_signal[1] = digital_decode[key_action];
     }
-    else if (key_action == 2)
+    else
     {
-        display_signal[1] = digital_decode[2];
-    }
-    else if (key_action == 3)
-    {
-        display_signal[1] = digital_decode[3];
-    }
-    else if (key_action == 4)
-    {
-        display_signal[1] = digital_decode[1];
+        display_signal[1] = 0x00;
     }
 }
 
