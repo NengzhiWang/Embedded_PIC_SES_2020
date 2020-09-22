@@ -364,7 +364,7 @@ void int_tmr_init(void)
 
 void start_disp(void)
 {
-    frame_repeat_num = 15;
+    frame_repeat_num = 1;
     display_clear_4;
     while (dis_cache_size)
     {
@@ -405,31 +405,22 @@ void loop(void)
         is_loose = 0;
         period_press = 0;
 
-        if ((period_loose > 30) || (key_buf != key) || key_action != 0)
+        if ((period_loose == 0xFF) || (key_buf != key))
         {
             // single click or quick click another key
             period_loose = 0;
-            key_action = 0;
-            // display_signal[1] = digital_decode[1];
             key_buf = key;
             display_signal[0] = digital_decode[key_buf];
             press_count[key_buf]++;
-            if (press_count[key_buf] == 100)
-            {
-                press_count[key_buf] = 0x00;
-            }
-            display_signal[2] = digital_decode[press_count[key_buf] / 10];
-            display_signal[3] = digital_decode[press_count[key_buf] % 10];
         }
         else
         {
-            // double click
-            if (key_action == 0)
-            {
-                key_action = 2;
-            }
+            key_action = 2;
+            is_loose = 0;
+            period_loose = 0xFF;
         }
     }
+
     if (key_loose << 1)
     {
         key_loose = 0;
@@ -438,20 +429,26 @@ void loop(void)
         period_loose = 0;
     }
 
-    if (key_action == 0 && period_loose > 30)
+    if (period_loose == 30 && key_action != 2)
     {
         key_action = 1;
-        period_loose = 0;
+        is_press = 0;
+        period_loose = 0xFF;
     }
 
-    if (period_press > 30)
+    if (period_press == 30)
     {
-        if (key_action == 0)
-        {
-            key_action = 3;
-            period_loose = 0;
-        }
+        key_action = 3;
+        is_press = 0;
+        period_loose = 0xFF;
     }
+
+    if (press_count[key_buf] == 100)
+    {
+        press_count[key_buf] = 0x00;
+    }
+    display_signal[2] = digital_decode[press_count[key_buf] / 10];
+    display_signal[3] = digital_decode[press_count[key_buf] % 10];
     if (key_action != 0)
     {
         display_signal[1] = digital_decode[key_action];

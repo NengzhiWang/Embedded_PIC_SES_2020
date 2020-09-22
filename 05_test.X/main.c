@@ -62,31 +62,20 @@ unsigned char display_signal[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 
 unsigned char display_cache[128] = {
     28, 0xFC, 238, 0xFC, // LOAD
-    28, 0xFC, 238, 0xFC, // LOAD
-    28, 0xFC, 238, 0xFC, // LOAD
-    28, 0xFC, 238, 0xFC, // LOAD
-    0x00, 0x00, 0x00, 0x00,
-    2, 0x00, 0x00, 0x00,
-    2, 2, 0x00, 0x00,
-    2, 2, 2, 0x00,
-    2, 2, 2, 2,
-    0x00, 0x00, 0x00, 0x00,
-    182, 158, 182, 0, // SES
-    182, 158, 182, 0, // SES
-    182, 158, 182, 0, // SES
-    182, 158, 182, 0, // SES
+    29, 0xFC, 238, 0xFC, // LOAD
+    29, 0xFD, 238, 0xFC, // LOAD
+    29, 0xFD, 239, 0xFC, // LOAD
+    29, 0xFD, 239, 0xFD, // LOAD
+    182, 158, 182, 0,    // SES
+
     0xDA, 0xFC, 0xDA, 0xFC,
     0xDA, 0xFC, 0xDA, 0xFC,
-    0xDA, 0xFC, 0xDA, 0xFC,
-    0xDA, 0xFC, 0xDA, 0xFC,
-    0xFC, 0xF7, 0x60, 0xE0,
-    0xFC, 0xF7, 0x60, 0xE0,
     0xFC, 0xF7, 0x60, 0xE0,
     0xFC, 0xF7, 0x60, 0xE0,
     0x02, 0x02, 0x02, 0x02,
     0x00, 0x00, 0x00, 0x00};
-
-unsigned char sum_frame_num = 24; // number of frame, in the display signal cache
+unsigned char dis_cache_size = 52; // byte saved in cache
+unsigned char sum_frame_num = 13;  // number of frame, in the display signal cache
 //unsigned char display_ctrl = 0b00000001;
 unsigned char display_ctrl;
 /*
@@ -106,7 +95,6 @@ unsigned char display_ctrl;
 #define display_loop_4 display_ctrl = 1, repeat_num = 0, frame_num = 0, frame_start = 0, frame_cache_num = (dis_cache_size >> 2)
 #define display_loop_1 display_ctrl = 0, repeat_num = 0, frame_num = 0, frame_start = 0, frame_cache_num = dis_cache_size
 #define display_real_time display_ctrl = 4
-unsigned char dis_cache_size = 128; // byte saved in cache
 unsigned char frame_cache_num;
 unsigned char frame_num;   // index of displaying frame
 unsigned char frame_start; // start index in display signal cache
@@ -376,7 +364,7 @@ void int_tmr_init(void)
 
 void start_disp(void)
 {
-    frame_repeat_num = 5;
+    frame_repeat_num = 15;
     display_clear_4;
     while (dis_cache_size)
     {
@@ -417,7 +405,7 @@ void loop(void)
         is_loose = 0;
         period_press = 0;
 
-        if ((period_loose > 30) || (key_buf != key) || key_action == 3)
+        if ((period_loose > 30) || (key_buf != key) || key_action != 0)
         {
             // single click or quick click another key
             period_loose = 0;
@@ -426,20 +414,15 @@ void loop(void)
             key_buf = key;
             display_signal[0] = digital_decode[key_buf];
             press_count[key_buf]++;
-            if (press_count[key_buf] == 100)
-            {
-                press_count[key_buf] = 0x00;
-            }
-            display_signal[2] = digital_decode[press_count[key_buf] / 10];
-            display_signal[3] = digital_decode[press_count[key_buf] % 10];
+           
         }
         else
         {
             // double click
-            is_double = 1;
-
-            key_action = 2;
-            // display_signal[1] = digital_decode[2];
+            if (key_action == 0)
+            {
+                key_action = 2;
+            }
         }
     }
     if (key_loose << 1)
@@ -448,10 +431,9 @@ void loop(void)
         is_press = 0;
         is_loose = 1;
         period_loose = 0;
-        is_double = 0;
     }
 
-    if (key_action == 0 && period_loose == 30)
+    if (key_action == 0 && period_loose > 30)
     {
         key_action = 1;
         period_loose = 0;
@@ -459,18 +441,19 @@ void loop(void)
 
     if (period_press > 30)
     {
-        if (!is_double && key_action != 2)
+        if (key_action == 0)
         {
             key_action = 3;
-        }
-        else if (is_double)
-        {
-            if (key_action == 1)
-            {
-                key_action = 2;
-            }
+            period_loose = 0;
         }
     }
+
+    if (press_count[key_buf] == 100)
+    {
+        press_count[key_buf] = 0x00;
+    }
+    display_signal[2] = digital_decode[press_count[key_buf] / 10];
+    display_signal[3] = digital_decode[press_count[key_buf] % 10];
     if (key_action != 0)
     {
         display_signal[1] = digital_decode[key_action];

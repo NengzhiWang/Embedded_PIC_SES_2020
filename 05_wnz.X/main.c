@@ -410,17 +410,10 @@ void loop(void)
             // single click or quick click another key
             period_loose = 0;
             key_action = 0;
-            // display_signal[1] = digital_decode[1];
             key_buf = key;
             display_signal[0] = digital_decode[key_buf];
             press_count[key_buf]++;
-            if (press_count[key_buf] == 100)
-            {
-                press_count[key_buf] = 0x00;
-            }
-            display_signal[2] = digital_decode[press_count[key_buf] / 10];
-            display_signal[3] = digital_decode[press_count[key_buf] % 10];
-        }
+                }
         else
         {
             // double click
@@ -452,6 +445,13 @@ void loop(void)
             period_loose = 0;
         }
     }
+
+    if (press_count[key_buf] == 100)
+    {
+        press_count[key_buf] = 0x00;
+    }
+    display_signal[2] = digital_decode[press_count[key_buf] / 10];
+    display_signal[3] = digital_decode[press_count[key_buf] % 10];
     if (key_action != 0)
     {
         display_signal[1] = digital_decode[key_action];

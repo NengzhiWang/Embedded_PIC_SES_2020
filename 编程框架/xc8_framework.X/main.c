@@ -48,127 +48,211 @@
 // Use project enums instead of #define for ON and OFF.
 #endif
 
+const unsigned char digital_decode[10] = {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6};
+const unsigned int LED_select_signal[4] = {0xEE, 0xDD, 0xBB, 0x77};
+// Display LEDs Select decode
 
+unsigned char interrupt_count = 0;
 
+unsigned char display_signal[4] = {0x00, 0x00, 0x00, 0x00};
+unsigned char count[10] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; //1 2 3 4 5 6 7 8 9 10
+unsigned char long_or_short = 0x00;
+unsigned char one_or_two = 0x00;
+unsigned char behavior = 0x00;
+unsigned char key = 0x00;
+unsigned char last_key = 0x00;
+unsigned char temp_key = 0x00;
+unsigned int interval = 0;
+unsigned int onecount = 0;
 
-
-
-const char decode[10] = {0xfc, 0x60, 0xda, 0xf2, 0x66, 0xb6, 0xbe, 0xe0, 0xfe, 0xf6};
-const char decoder[4] = {0xe0, 0xd0, 0xb0, 0x70};
-const char COUNT[256] = {0, 1, 0, 0, 0, 0, 0, 0, 0, 0};
-unsigned int count = 0;
-unsigned int t = 0;
-unsigned char i = 0;
-unsigned char SUM = 0;
-
-
-
-unsigned int push = 0;
-unsigned int push1 = 0;
-unsigned int out = 0;
-unsigned int out1 = 0;
-unsigned char index;
-
-void key_scan(void) {
-    t++;
-    PORTB = 0b00001111;
-
-    if (PORTBbits.RB0 == 0) {
-        index = 7;
-        if(t)
-            SUM ++;
-    } else if (PORTBbits.RB1 == 0)
-        index = (8);
-    else if (PORTBbits.RB2 == 0)
-        index = (9);
-    else if (PORTBbits.RB3 == 0)
-        index = (0);
-
-    else // if (round == 2)
+void scan(void)
+{
+    PORTB = 0x0f;
+    if (PORTB != 0x0f)
     {
-        PORTB = 0b00000111;
-        if (PORTB != 7) {
-            if (PORTBbits.RB0 == 0)
-                index = (2);
-            if (PORTBbits.RB1 == 0)
-                index = (4);
-            if (PORTBbits.RB2 == 0)
-                index = (6);
-
-        } else // if (round == 3)
+        if (PORTBbits.RB0 == 0)
+            key = 7;
+        else if (PORTBbits.RB1 == 0)
+            key = 8;
+        else if (PORTBbits.RB2 == 0)
+            key = 9;
+        else if (PORTBbits.RB3 == 0)
+            key = 10;
+    }
+    else
+    {
+        PORTB = 0x07; //0000 0111
+        if (PORTB != 0x07)
         {
-            PORTB = 0b00001011;
-            if (PORTB != 0b00001011) {
+            if (PORTBbits.RB0 == 0)
+                key = 2;
+            else if (PORTBbits.RB1 == 0)
+                key = 4;
+            else if (PORTBbits.RB2 == 0)
+                key = 6;
+        }
+        else
+        {
+            PORTB = 0x03; //0000 0011
+            if (PORTB != 0x03)
+            {
                 if (PORTBbits.RB0 == 0)
-                    index = 1;
-                if (PORTBbits.RB1 == 0)
-                    index = 3;
-
-            } else {
-                PORTB = 0b00001101;
-                if (PORTBbits.RB0 == 0)
-                    index = (5);
-
-
+                    key = 1;
+                else
+                    key = 3;
+            }
+            else
+            {
+                PORTB = 0x01;      //0000 0001
+                if (PORTB != 0x01) //0000 0001
+                    key = 5;
+                else
+                    key = 0;
             }
         }
     }
-}
 
-void __interrupt() isr(void) {
-     // count=count+1;
-    PIR0bits.TMR0IF = 0;
-    TMR0H = 0xf7;
-    TMR0L = 0xf3;
-    if (i == 0) {
-        PORTC = 0;
-        PORTA = decoder[3];
-        PORTC = decode[(SUM) / 10];
-        i++;
-    } else if (i == 1) {
-        PORTC = 0;
-        PORTA = decoder[2];
-        PORTC = decode[(SUM) % 10];
-        i++;
-    } else if (i == 2) {
-        PORTC = 0;
-        PORTA = decoder[1];
-        PORTC = 0;
-        i++;
-    } else if (i > 2) {
-        PORTC = 0x00;
-        PORTA = decoder[0];
-        key_scan();
-        PORTC = decode[index];
-        i = 0;
+    if (interval != 0)
+        interval = interval - 1;
+
+    if (key != 0)
+    {
+        if (one_or_two == 1 & onecount == 0)
+            one_or_two = 0;
+        if (onecount > 1) //key is continued
+        {
+            onecount = onecount + 1;
+            if (onecount > 200)
+                long_or_short = 1;
+            else
+                long_or_short = 0;
+        }
+        else if (onecount == 1) //key is started
+        {
+            if (interval >= 350 & last_key == key & long_or_short == 0) //key is too closed
+                one_or_two = 1;
+
+            if (one_or_two != 1) //key is not too closed
+            {
+                count[key - 1] = count[key - 1] + 1;
+                onecount = onecount + 1;
+                temp_key = key;
+            }
+
+            if (onecount > 200)
+                long_or_short = 1;
+            else
+                long_or_short = 0;
+        }
+        else if (onecount == 0) //prevent shake
+        {
+            onecount = onecount + 1;
+        }
     }
+    else
+    {
+        if (onecount > 0) //key is ended. or clean the shake
+        {
+            onecount = 0;
+            interval = 400;
+            last_key = temp_key;
+        }
+
+        if (one_or_two == 0 & interval == 350)
+            behavior = 1;
+    }
+
+    if (one_or_two == 1)
+        behavior = 2;
+    else if (long_or_short == 1)
+        behavior = 3;
+    else if (behavior == 1)
+        behavior = 1;
+    else
+        behavior = 0;
+}
+void __interrupt() isr(void)
+{
+    // reset TMR0
+    TMR0_rst;
+    interrupt_count++;
+    // clear PORTC
+    PORTC = 0x00;
+    PORTA = LED_select_signal[interrupt_count & 0x03];
+
+    scan();
+    if (key == 0)
+    {
+        display_signal[3] = digital_decode[behavior];
+        PORTC = display_signal[interrupt_count & 0x03];
+    }
+    else if (key == 10)
+    {
+        display_signal[0] = digital_decode[1];
+        display_signal[1] = digital_decode[0];
+        display_signal[2] = digital_decode[count[key - 1] % 10];
+        display_signal[3] = digital_decode[behavior];
+        PORTC = display_signal[interrupt_count & 0x03];
+    }
+    else
+    {
+        display_signal[0] = digital_decode[0];
+        display_signal[1] = digital_decode[key];
+        display_signal[2] = digital_decode[count[key - 1] % 10];
+        display_signal[3] = digital_decode[behavior];
+        PORTC = display_signal[interrupt_count & 0x03];
+    }
+    PORTC = display_signal[interrupt_count & 0x03];
 }
 
-void init(void) {
-    PORTA = 0;
-    TRISA = 0;
-    ANSELA = 0;
+void port_init(void)
+{
+    // init PORTC
+    ANSELA = 0x00;
+    LATA = 0x00;
+    TRISA = 0x00;
+    ANSELB = 0x00;
     LATB = 0x00;
-
-    TRISB = 0;
-    ANSELB = 0;
-    PORTC = 0;
-    TRISC = 0;
-    ANSELC = 0;
-    T0CON1 = 0b01000000;
-    T0CON0 = 0b10010000;
-    TMR0H = 0xf7;
-    TMR0L = 0xf3;
-    INTCONbits.GIE = 1;
-    PIE0bits.TMR0IE = 1;
-    PORTC = decode[0];
-
+    TRISB = 0x00;
+    ANSELC = 0x00;
+    LATC = 0x00;
+    TRISC = 0x00;
 }
 
-void main(void) {
-    init();
+void int_tmr_init(void)
+{
+    // init interrupt
+    INTCONbits.GIE = 1;
+    // global interrupt     enable
+    INTCONbits.PEIE = 0;
+    // peripheral interrupt disable
+    INTCONbits.INTEDG = 1;
+    // interrupt            rising edge
+    PIE0bits.TMR0IE = 1;
+    // Timer0 interrupt     enable
 
-    while (1) {
-    };
+    // init TMR0
+    T0CON0 = 0xD0;
+    T0CON1 = 0x40;
+    TMR0_rst;
+}
+
+void setup(void)
+{
+    port_init();
+    int_tmr_init();
+}
+
+void loop(void)
+{
+}
+
+void main(void)
+{
+    setup();
+    while (1)
+    {
+        loop();
+    }
     return;
 }
