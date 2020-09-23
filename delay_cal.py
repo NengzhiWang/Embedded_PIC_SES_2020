@@ -1,3 +1,6 @@
+# delay time calculater for project: 01_blink_delay_asm
+
+
 def Inst_Num(n0, n1, n2, offset):
     return 3 * n0 * n1 * n2 + 4 * n0 * n1 + 4 * n0 + 5 + offset
 
@@ -20,18 +23,17 @@ def Calculate_N(Instruction_Num, offset):
 
 
 inst_freq = 1e6
+# input the frequency of your PIC, default 1Mhz
 loop_time = .5
+# input the time you want to delay
 loop_offset = 4
+# input the instruction number out of delay
 inst_num = int(loop_time * inst_freq)
-# inst_num = 24999209
 n0, n1, n2 = Calculate_N(inst_num, loop_offset)
 
 print('Required Instruction Num', inst_num)
 print('n0=', hex(n0))
 print('n1=', hex(n1))
 print('n2=', hex(n2))
-# print('n0=', n0)
-# print('n1=', n1)
-# print('n2=', n2)
 
 print('Accuracy Instruction', Inst_Num(n0, n1, n2, loop_offset))
