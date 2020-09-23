@@ -14,13 +14,13 @@ org BLOFFSET
 ; pre define
 ; address in Common RAM, no need for `BANKSEL`
 udata_shr
-N0      res     1h     
+N0      res     1h
 N1      res     1h
 N2      res     1h
 
-RST code    BLOFFSET
-PAGESEL    MAIN
-GOTO	MAIN
+RST     code    BLOFFSET
+PAGESEL         MAIN
+GOTO            MAIN
 
 code
 ; =============================================
